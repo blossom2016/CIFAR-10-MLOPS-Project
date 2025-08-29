@@ -156,15 +156,27 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker
+
+      - name: Build and push Docker image
         run: |
           cd stage1_cifar10
-          docker build -t cifar10-ml:test .
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/cifar10-ml:${{ github.sha }} .
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/cifar10-ml:${{ github.sha }}
 
       - name: Test Docker image
         run: |
           cd stage1_cifar10
-          docker run --rm cifar10-ml:test python -c "import torch; print('PyTorch version:', torch.__version__)"
+          docker run --rm gcr.io/${{ secrets.GCP_PROJECT_ID }}/cifar10-ml:${{ github.sha }} python -c "import torch; print('PyTorch version:', torch.__version__)"
 
   # Kubernetes Manifest Validation
   k8s-validate:
@@ -221,11 +233,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.GCP_CLUSTER_NAME }} \
+            --zone ${{ secrets.GCP_CLUSTER_ZONE }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+
       - name: Deploy to staging environment
         run: |
           echo "Deploying to staging environment..."
-          # Add your staging deployment commands here
-          # Example: kubectl apply -f stage1_cifar10/k8s/ -n staging
+          cd stage1_cifar10/k8s
+          kubectl apply -f namespace.yaml
+          kubectl apply -f configmap.yaml
+          kubectl apply -f secret.yaml
+          kubectl apply -f deployment.yaml
+          kubectl apply -f service.yaml
 
       - name: Notify deployment success
         run: |
@@ -242,11 +275,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.GCP_CLUSTER_NAME }} \
+            --zone ${{ secrets.GCP_CLUSTER_ZONE }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+
       - name: Deploy to production environment
         run: |
           echo "Deploying to production environment..."
-          # Add your production deployment commands here
-          # Example: kubectl apply -f stage1_cifar10/k8s/ -n production
+          cd stage1_cifar10/k8s
+          kubectl apply -f namespace.yaml
+          kubectl apply -f configmap.yaml
+          kubectl apply -f secret.yaml
+          kubectl apply -f deployment.yaml
+          kubectl apply -f service.yaml
 
       - name: Notify deployment success
         run: |
