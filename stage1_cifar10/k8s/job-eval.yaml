@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mlops-evaluation-job
+  namespace: mlops
+  labels:
+    app: mlops-fastapi
+    component: evaluation
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: mlops-fastapi
+        component: evaluation
+    spec:
+      serviceAccountName: mlops-fastapi-sa
+      containers:
+        - name: evaluation
+          image: gcr.io/my-mlops-project2/vision-inference:eval
+          command: ["python"]
+          args: ["evaluate.py", "--weights", "/app/artifacts/model.pt"]
+          env:
+            - name: MODEL_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MODEL_PATH
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: LOG_LEVEL
+            - name: MPLCONFIGDIR
+              value: "/tmp/matplotlib"
+            - name: PYTHONPATH
+              value: "/app"
+          volumeMounts:
+            - name: artifacts
+              mountPath: /app/artifacts
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: mlops-artifacts-pvc
+      restartPolicy: Never 

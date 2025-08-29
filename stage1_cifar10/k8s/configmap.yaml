@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlops-config
+  namespace: mlops
+data:
+  # Application configuration
+  MODEL_PATH: "/app/artifacts/model.pt"
+  CLASSES_PATH: "/app/artifacts/classes.txt"
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  
+  # Model configuration
+  NUM_CLASSES: "10"
+  IMAGE_SIZE: "32"
+  
+  # Logging configuration
+  LOG_LEVEL: "INFO"
+  
+  # CIFAR-10 class labels
+  CLASSES: |
+    airplane
+    automobile
+    bird
+    cat
+    deer
+    dog
+    frog
+    horse
+    ship
+    truck 

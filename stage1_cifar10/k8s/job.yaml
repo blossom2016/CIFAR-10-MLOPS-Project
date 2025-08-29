@@ -1,0 +1,100 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mlops-training-job
+  namespace: mlops
+  labels:
+    app: mlops-fastapi
+    component: training
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: mlops-fastapi
+        component: training
+    spec:
+      containers:
+        - name: training
+          image: mlops-fastapi:latest
+          command: ["python"]
+          args: ["train.py"]
+          env:
+            - name: MODEL_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MODEL_PATH
+            - name: NUM_CLASSES
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: NUM_CLASSES
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: LOG_LEVEL
+          volumeMounts:
+            - name: artifacts
+              mountPath: /app/artifacts
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: mlops-artifacts-pvc
+      restartPolicy: Never
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mlops-evaluation-job
+  namespace: mlops
+  labels:
+    app: mlops-fastapi
+    component: evaluation
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: mlops-fastapi
+        component: evaluation
+    spec:
+      containers:
+        - name: evaluation
+          image: mlops-fastapi:latest
+          command: ["python"]
+          args: ["evaluate.py"]
+          env:
+            - name: MODEL_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MODEL_PATH
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: LOG_LEVEL
+          volumeMounts:
+            - name: artifacts
+              mountPath: /app/artifacts
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: mlops-artifacts-pvc
+      restartPolicy: Never 

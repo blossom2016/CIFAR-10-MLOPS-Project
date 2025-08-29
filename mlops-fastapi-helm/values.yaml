@@ -1,0 +1,12 @@
+replicaCount: 1
+
+image:
+  repository: <acct>.dkr.ecr.<region>.amazonaws.com/mlops-fastapi
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: LoadBalancer
+  port: 80
+
+resources: {}

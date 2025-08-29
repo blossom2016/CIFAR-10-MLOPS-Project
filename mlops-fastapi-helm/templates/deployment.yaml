@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mlops-fastapi.fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "mlops-fastapi.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "mlops-fastapi.name" . }}
+    spec:
+      containers:
+        - name: mlops-fastapi
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 80

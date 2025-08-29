@@ -1,0 +1,145 @@
+Stage 1 — Core ML Basics
+
+    ✅ Goal: Train a simple image classifier locally.
+
+    Learn Python basics (if not already comfortable).
+
+    Install PyTorch.
+
+    Download a dataset (start with CIFAR-10 — much smaller than Food-101).
+
+    Write code to:
+
+    Load images
+
+    Train a small CNN (or use a pretrained ResNet)
+
+    Test accuracy
+
+    👉 Output: A .pt (PyTorch) file with your trained model.
+
+Stage 2 — Make It a Service
+
+    ✅ Goal: Turn your model into a web app.
+
+    Learn FastAPI (very beginner-friendly).
+
+    Write an API endpoint /predict that:
+
+    Accepts an uploaded image
+
+    Runs the model
+
+    Returns predictions as JSON
+
+    👉 Output: You can curl or use Postman to send an image → get back predictions.
+
+Stage 3 — Containerize with Docker
+
+    ✅ Goal: Package your API so it runs anywhere.
+
+    Install Docker.
+
+    Write a Dockerfile for your FastAPI app.
+
+    Build the image and run it:
+
+    docker build -t vision-inference .
+    docker run -p 8080:8080 vision-inference
+
+
+    Test: curl http://localhost:8080/predict with an image.
+
+    👉 Output: A working Docker container with your ML service.
+
+Stage 4 — Deploy on Kubernetes
+
+    ✅ Goal: Run your container in the cloud (or locally with minikube).
+
+    Learn basic Kubernetes concepts (Pods, Services, Deployments, Ingress).
+
+    Write a deployment.yaml and service.yaml for your app.
+
+    Apply with kubectl apply -f deployment.yaml.
+
+    Expose the service and send requests.
+
+    👉 Output: Your ML API is running in Kubernetes.
+
+Stage 5 — Experiment Tracking
+
+    ✅ Goal: Keep track of different model versions.
+
+    Learn about MLflow.
+
+    Add MLflow logging to your training script (log accuracy, loss, and parameters).
+
+    Run multiple experiments and compare results in the MLflow UI.
+
+    👉 Output: You now know which version of your model performs best.
+
+Stage 6 — CI/CD Automation
+
+    ✅ Goal: Automate training + deployment.
+
+    Learn GitHub Actions.
+
+    Create a workflow that:
+
+    Runs tests
+
+    Builds Docker image
+
+    Pushes to registry (DockerHub or AWS ECR)
+
+    Deploys to Kubernetes with Helm
+
+    👉 Output: Every code change → new version automatically deployed.
+
+Stage 7 — Monitoring
+
+    ✅ Goal: Watch system + model performance.
+
+    Install Prometheus + Grafana in your cluster.
+
+    Add FastAPI metrics (e.g., latency, errors).
+
+    Install Evidently or whylogs to check for model/data drift.
+
+    👉 Output: Dashboards showing system health and model health.
+
+Stage 8 — Automation with Pipelines
+
+    ✅ Goal: Fully automated ML lifecycle.
+
+    Install Kubeflow Pipelines (or Prefect if Kubeflow is too heavy).
+
+    Write a pipeline that:
+
+    Loads new data
+
+    Retrains the model
+
+    Evaluates accuracy
+
+    If good → registers new version + redeploys
+
+    👉 Output: Continuous Training & Deployment (CT/CD) like real-world ML systems.
+
+🌟 Summary of Your Learning Path
+
+    Train model locally → Stage 1
+
+    API with FastAPI → Stage 2
+
+    Dockerize service → Stage 3
+
+    Deploy on K8s → Stage 4
+
+    Track experiments (MLflow) → Stage 5
+
+    Automate with CI/CD → Stage 6
+
+    Monitor service + drift → Stage 7
+
+    Automate retraining (Kubeflow) → Stage 8

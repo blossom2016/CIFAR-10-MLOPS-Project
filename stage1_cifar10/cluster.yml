@@ -1,0 +1,20 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: mlops-cluster
+  region: us-east-1
+  version: "1.30"   # match latest supported EKS version
+
+vpc:
+  cidr: 10.0.0.0/16   # eksctl will create a new VPC with this CIDR
+
+managedNodeGroups:
+  - name: ng-mlops
+    instanceType: t3.medium
+    desiredCapacity: 2
+    minSize: 1
+    maxSize: 3
+    volumeSize: 20
+    ssh:
+      enableSsm: true   # use AWS SSM to connect, no SSH key needed

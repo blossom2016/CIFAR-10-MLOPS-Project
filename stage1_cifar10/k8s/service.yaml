@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlops-fastapi-service
+  namespace: mlops
+  labels:
+    app: mlops-fastapi
+    component: api
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: mlops-fastapi
+    component: api
+---
+# LoadBalancer service for external access (uncomment if needed)
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: mlops-fastapi-lb
+#   namespace: mlops
+#   labels:
+#     app: mlops-fastapi
+#     component: api
+# spec:
+#   type: LoadBalancer
+#   ports:
+#     - name: http
+#       port: 80
+#       targetPort: 8000
+#       protocol: TCP
+#   selector:
+#     app: mlops-fastapi
+#     component: api
+---
+# NodePort service for development/testing
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlops-fastapi-nodeport
+  namespace: mlops
+  labels:
+    app: mlops-fastapi
+    component: api
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      nodePort: 30080
+      protocol: TCP
+  selector:
+    app: mlops-fastapi
+    component: api 

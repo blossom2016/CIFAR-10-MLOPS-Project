@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mlops-fastapi-sa
+  namespace: mlops
+  labels:
+    app: mlops-fastapi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mlops-fastapi-role
+  namespace: mlops
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mlops-fastapi-rolebinding
+  namespace: mlops
+subjects:
+  - kind: ServiceAccount
+    name: mlops-fastapi-sa
+    namespace: mlops
+roleRef:
+  kind: Role
+  name: mlops-fastapi-role
+  apiGroup: rbac.authorization.k8s.io 

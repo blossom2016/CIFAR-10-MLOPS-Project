@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlops-fastapi
+  namespace: mlops
+  labels:
+    app: mlops-fastapi
+    component: api
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: mlops-fastapi
+      component: api
+  template:
+    metadata:
+      labels:
+        app: mlops-fastapi
+        component: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: fastapi
+          image: mlops-fastapi:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: MODEL_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: MODEL_PATH
+            - name: CLASSES_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: CLASSES_PATH
+            - name: API_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: API_HOST
+            - name: API_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: API_PORT
+            - name: NUM_CLASSES
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: NUM_CLASSES
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: mlops-config
+                  key: LOG_LEVEL
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secret
+                  key: API_KEY
+          envFrom:
+            - configMapRef:
+                name: mlops-config
+          volumeMounts:
+            - name: artifacts
+              mountPath: /app/artifacts
+              readOnly: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: mlops-artifacts-pvc
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30 
