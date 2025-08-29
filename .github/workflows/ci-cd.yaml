@@ -1,0 +1,307 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.9'
+  PIP_CACHE_DIR: ~/.cache/pip
+
+jobs:
+  # Linting and Code Quality
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy
+          pip install -r stage1_cifar10/requirements.txt
+
+      - name: Run Black (code formatting check)
+        run: |
+          black --check --diff stage1_cifar10/
+
+      - name: Run isort (import sorting check)
+        run: |
+          isort --check-only --diff stage1_cifar10/
+
+      - name: Run flake8 (linting)
+        run: |
+          flake8 stage1_cifar10/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 stage1_cifar10/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Run mypy (type checking)
+        run: |
+          mypy stage1_cifar10/ --ignore-missing-imports
+
+  # Security Scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Bandit security scan
+        uses: python-security/bandit-action@v1.0.0
+        with:
+          path: stage1_cifar10/
+          level: low
+          confidence: low
+
+      - name: Run Safety check
+        uses: python-security/safety-action@v1.0.0
+        with:
+          path: stage1_cifar10/requirements.txt
+
+  # Unit Tests
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
+          pip install -r stage1_cifar10/requirements.txt
+
+      - name: Run tests with pytest
+        run: |
+          cd stage1_cifar10
+          pytest tests/ -v --cov=. --cov-report=xml --cov-report=html
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: stage1_cifar10/coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  # Model Training Test (Lightweight)
+  train-test:
+    name: Model Training Test
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r stage1_cifar10/requirements.txt
+
+      - name: Create minimal test data
+        run: |
+          cd stage1_cifar10
+          mkdir -p data/cifar-10-batches-py
+          # Create dummy data files for testing
+          echo "dummy_data" > data/cifar-10-batches-py/batches.meta
+          echo "dummy_data" > data/cifar-10-batches-py/data_batch_1
+          echo "dummy_data" > data/cifar-10-batches-py/test_batch
+
+      - name: Test model training (lightweight)
+        run: |
+          cd stage1_cifar10
+          python train.py --epochs 1 --batch-size 4 --lr 0.001 --out-dir ./test_artifacts
+
+      - name: Cleanup test artifacts
+        run: |
+          cd stage1_cifar10
+          rm -rf test_artifacts
+          rm -rf mlruns
+
+  # Docker Build and Test
+  docker:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          cd stage1_cifar10
+          docker build -t cifar10-ml:test .
+
+      - name: Test Docker image
+        run: |
+          cd stage1_cifar10
+          docker run --rm cifar10-ml:test python -c "import torch; print('PyTorch version:', torch.__version__)"
+
+  # Kubernetes Manifest Validation
+  k8s-validate:
+    name: Kubernetes Manifest Validation
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Validate Kubernetes manifests
+        run: |
+          cd stage1_cifar10/k8s
+          for file in *.yaml; do
+            if [ -f "$file" ]; then
+              echo "Validating $file"
+              kubectl apply --dry-run=client -f "$file"
+            fi
+          done
+
+  # Helm Chart Validation
+  helm-validate:
+    name: Helm Chart Validation
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Validate Helm chart
+        run: |
+          cd mlops-fastapi-helm
+          helm lint .
+          helm template . --dry-run
+
+  # Deploy to Staging (on main branch)
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [lint, test, train-test, docker, k8s-validate, helm-validate]
+    if: github.ref == 'refs/heads/main'
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging environment
+        run: |
+          echo "Deploying to staging environment..."
+          # Add your staging deployment commands here
+          # Example: kubectl apply -f stage1_cifar10/k8s/ -n staging
+
+      - name: Notify deployment success
+        run: |
+          echo "✅ Successfully deployed to staging environment"
+
+  # Deploy to Production (manual trigger)
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [lint, test, train-test, docker, k8s-validate, helm-validate]
+    if: github.event_name == 'workflow_dispatch'
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to production environment
+        run: |
+          echo "Deploying to production environment..."
+          # Add your production deployment commands here
+          # Example: kubectl apply -f stage1_cifar10/k8s/ -n production
+
+      - name: Notify deployment success
+        run: |
+          echo "✅ Successfully deployed to production environment"
+
+  # Performance and Load Testing
+  performance:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install locust
+
+      - name: Run performance tests
+        run: |
+          echo "Running performance tests..."
+          # Add your performance testing commands here
+          # Example: locust -f stage1_cifar10/tests/load_test.py --headless --users 10 --spawn-rate 1 --run-time 30s
+
+  # Final Status Check
+  status-check:
+    name: Final Status Check
+    runs-on: ubuntu-latest
+    needs: [lint, test, train-test, docker, k8s-validate, helm-validate, deploy-staging]
+    if: always()
+    steps:
+      - name: Check job status
+        run: |
+          echo "Pipeline Status Summary:"
+          echo "Lint: ${{ needs.lint.result }}"
+          echo "Test: ${{ needs.test.result }}"
+          echo "Train Test: ${{ needs.train-test.result }}"
+          echo "Docker: ${{ needs.docker.result }}"
+          echo "K8s Validate: ${{ needs.k8s-validate.result }}"
+          echo "Helm Validate: ${{ needs.helm-validate.result }}"
+          echo "Deploy Staging: ${{ needs.deploy-staging.result }}"
+          
+          if [[ "${{ needs.lint.result }}" == "success" && 
+                "${{ needs.test.result }}" == "success" && 
+                "${{ needs.train-test.result }}" == "success" ]]; then
+            echo "✅ All critical checks passed!"
+          else
+            echo "❌ Some checks failed!"
+            exit 1
+          fi
