@@ -78,7 +78,7 @@ def main():
     with open(os.path.join(args.out_dir, 'classes.txt'), 'w') as f:
         f.write('\n'.join(classes))
 
-    # Start MLflow run
+    # Start MLflow run.
     with mlflow.start_run(run_name=args.run_name):
         # Log parameters
         mlflow.log_params({
