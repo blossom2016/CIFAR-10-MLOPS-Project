@@ -1,12 +1,18 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, UploadFile, File, Request
+from fastapi.responses import JSONResponse, Response
 import torch
 from torchvision import transforms
 from PIL import Image
 from model import build_model
 import os
 import logging
+import time
 from datetime import datetime
+from monitoring import (
+    record_prediction, get_model_metrics, get_system_metrics, 
+    detect_model_drift, set_baseline_metrics, PredictionRecord,
+    get_prometheus_metrics, MODEL_LOADED
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,9 +31,11 @@ try:
     model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
     model.eval()
     logger.info(f"Model loaded successfully from {MODEL_PATH}")
+    MODEL_LOADED.set(1)  # Set Prometheus metric
 except Exception as e:
     logger.error(f"Failed to load model from {MODEL_PATH}: {e}")
     model = None
+    MODEL_LOADED.set(0)  # Set Prometheus metric
 
 # Image preprocessing
 transform = transforms.Compose([
@@ -80,23 +88,77 @@ def readiness_check():
 @app.get("/metrics")
 def metrics():
     """Metrics endpoint for Prometheus monitoring"""
+    return Response(
+        content=get_prometheus_metrics(),
+        media_type="text/plain"
+    )
+
+@app.get("/monitoring/model")
+def model_monitoring():
+    """Get model monitoring metrics"""
+    metrics = get_model_metrics()
     return {
-        "model_loaded": 1 if model is not None else 0,
-        "total_classes": len(classes),
-        "model_path": MODEL_PATH
+        "model_metrics": {
+            "total_predictions": metrics.total_predictions,
+            "successful_predictions": metrics.successful_predictions,
+            "failed_predictions": metrics.failed_predictions,
+            "avg_confidence": metrics.avg_confidence,
+            "avg_processing_time": metrics.avg_processing_time,
+            "class_distribution": metrics.class_distribution,
+            "recent_errors": metrics.recent_errors
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/monitoring/system")
+def system_monitoring():
+    """Get system monitoring metrics"""
+    return get_system_metrics()
+
+@app.get("/monitoring/drift")
+def drift_detection():
+    """Check for model drift"""
+    return detect_model_drift()
+
+@app.post("/monitoring/baseline")
+def set_baseline():
+    """Set baseline metrics for drift detection"""
+    current_metrics = get_model_metrics()
+    set_baseline_metrics(current_metrics)
+    return {
+        "message": "Baseline metrics set successfully",
+        "baseline": {
+            "avg_confidence": current_metrics.avg_confidence,
+            "avg_processing_time": current_metrics.avg_processing_time,
+            "class_distribution": current_metrics.class_distribution
+        },
+        "timestamp": datetime.now().isoformat()
     }
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
+    start_time = time.time()
+    
     if model is None:
+        error_msg = "Model not loaded"
+        record_prediction(PredictionRecord(
+            timestamp=datetime.now(),
+            predicted_class="unknown",
+            confidence=0.0,
+            processing_time=time.time() - start_time,
+            input_size=(0, 0),
+            success=False,
+            error_message=error_msg
+        ))
         return JSONResponse(
-            content={"error": "Model not loaded"},
+            content={"error": error_msg},
             status_code=503
         )
     
     try:
         # Load image
         image = Image.open(file.file).convert("RGB")
+        input_size = image.size
         x = transform(image).unsqueeze(0)
 
         # Prediction
@@ -105,16 +167,41 @@ async def predict(file: UploadFile = File(...)):
             predicted_class = classes[preds.argmax(dim=1).item()]
             confidence = torch.softmax(preds, dim=1).max().item()
 
+        processing_time = time.time() - start_time
         logger.info(f"Prediction: {predicted_class} with confidence: {confidence:.3f}")
+        
+        # Record prediction for monitoring
+        record_prediction(PredictionRecord(
+            timestamp=datetime.now(),
+            predicted_class=predicted_class,
+            confidence=confidence,
+            processing_time=processing_time,
+            input_size=input_size,
+            success=True
+        ))
         
         return {
             "prediction": predicted_class,
             "confidence": confidence,
+            "processing_time": processing_time,
             "timestamp": datetime.now().isoformat()
         }
 
     except Exception as e:
+        processing_time = time.time() - start_time
         logger.error(f"Prediction error: {e}")
+        
+        # Record failed prediction for monitoring
+        record_prediction(PredictionRecord(
+            timestamp=datetime.now(),
+            predicted_class="unknown",
+            confidence=0.0,
+            processing_time=processing_time,
+            input_size=(0, 0),
+            success=False,
+            error_message=str(e)
+        ))
+        
         return JSONResponse(
             content={"error": str(e)},
             status_code=500

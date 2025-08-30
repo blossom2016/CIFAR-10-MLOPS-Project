@@ -202,7 +202,7 @@ jobs:
             fi
           done
 
-  # Helm Chart Validation
+  # Helm Chart Validation.
   helm-validate:
     name: Helm Chart Validation
     runs-on: ubuntu-latest
